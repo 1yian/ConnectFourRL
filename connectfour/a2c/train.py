@@ -1,3 +1,7 @@
+import random
+
+import numpy as np
+
 from connectfour.env.parallel_env import ParallelEnv
 
 
@@ -6,6 +10,37 @@ class TrainingSession:
         self.game = game
         self.agent = agent
         self.buffer = buffer
+
+    def eval_vs_random(self, num_envs, num_episodes):
+        score = {'agent': 0, 'random': 0}
+        env = ParallelEnv(game_class=self.game, parallel_envs=num_envs)
+        agent_is_playing = True
+        states = env.reset()
+        episode_count = 0
+        while episode_count < num_episodes * num_envs:
+
+            if agent_is_playing:
+                valid_moves = [self.get_valid_moves(state) for state in states]
+                _, actions = self.agent.select_actions(states, valid_moves, greedy=True)
+            else:
+                valid_moves = [self.get_valid_move_indices(state) for state in states]
+                actions = np.array([random.choice(moves) for moves in valid_moves])
+
+            new_states, rewards, dones = env.step(actions)
+            for env_index in range(num_envs):
+                if dones[env_index]:
+                    if rewards[env_index] != 0:
+                        if agent_is_playing:
+                            score['agent'] += 1
+                        else:
+                            score['random'] += 1
+                    else:
+                        score['agent'] += 0.5
+                        score['random'] += 0.5
+                    episode_count += 1
+            agent_is_playing = not agent_is_playing
+            states = new_states
+        return score
 
     def self_play_episodes(self, num_envs, num_episodes):
         p1_episode = [[] for _ in range(num_envs)]
@@ -51,3 +86,11 @@ class TrainingSession:
             if top_row[i] == 0:
                 ohe_valid_moves[i] = 1
         return ohe_valid_moves
+
+    def get_valid_move_indices(self, state):
+        top_row = state[0]
+        move_indices = []
+        for i in range(len(top_row)):
+            if top_row[i] == 0:
+                move_indices.append(i)
+        return move_indices

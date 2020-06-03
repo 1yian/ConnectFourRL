@@ -16,3 +16,6 @@ class ParallelEnv:
 
     def reset(self):
         return [env.reset() for env in self.envs]
+
+    def render(self):
+        return [env.render() for env in self.envs]
