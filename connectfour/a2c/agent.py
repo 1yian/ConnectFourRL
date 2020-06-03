@@ -70,9 +70,9 @@ class ActorCriticAgent(nn.Module):
         return new_state
 
     def train_on_loader(self, loader):
-        policy_loss = 0.0
-        entropy_loss = 0.0
-        value_loss = 0.0
+        policy_loss = []
+        entropy_loss = []
+        value_loss = []
         for batch in loader:
             self.optimizer.zero_grad()
             states, actions, rewards = batch
@@ -83,13 +83,17 @@ class ActorCriticAgent(nn.Module):
 
             advantage = rewards - value.detach()
 
-            policy_loss += - (advantage * policy_log_probs[range(len(actions)), actions]).mean()
+            policy_loss.append(- (advantage * policy_log_probs[range(len(actions)), actions]).mean())
 
-            entropy_loss += (config.ENTROPY_SCALE * policy_log_probs * torch.exp(policy_log_probs)).sum(dim=1).mean()
+            entropy_loss.append(
+                (config.ENTROPY_SCALE * policy_log_probs * torch.exp(policy_log_probs)).sum(dim=1).mean())
 
             value = value.squeeze(1)
-            value_loss += torch.nn.functional.mse_loss(value, rewards)
+            value_loss.append(torch.nn.functional.mse_loss(value, rewards).mean())
 
+        value_loss = torch.stack(value_loss).mean()
+        policy_loss = torch.stack(policy_loss).mean()
+        entropy_loss = torch.stack(entropy_loss).mean()
         if self.writer:
             self.writer.add_scalar('Train/entropy_loss', entropy_loss, self.iter)
             self.writer.add_scalar('Train/policy_loss', policy_loss, self.iter)
@@ -122,11 +126,12 @@ class ActorCriticAgent(nn.Module):
 class GenericNetwork(nn.Module):
     def __init__(self, output_dim):
         super(GenericNetwork, self).__init__()
-        self.activation = nn.ReLU()
-        self.conv1 = nn.Conv2d(2, 128, 4, 1)
-        self.bn1 = nn.BatchNorm2d(128)
+        self.activation = nn.LeakyReLU()
+        self.conv1 = nn.Conv2d(2, 256, 4, 1)
+        self.bn1 = nn.BatchNorm2d(256)
         self.flatten = nn.Flatten(start_dim=1)
-        self.fc1 = nn.Linear(1536, output_dim)
+        self.fc1 = nn.Linear(3072, 256)
+        self.fc2 = nn.Linear(256, output_dim)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -134,5 +139,7 @@ class GenericNetwork(nn.Module):
         x = self.activation(x)
         x = self.flatten(x)
         x = self.fc1(x)
+        x = self.activation(x)
+        x = self.fc2(x)
 
         return x
