@@ -44,9 +44,14 @@ class ExperienceReplayBuffer(Dataset):
 def collate_experiences(experiences):
     batch_states = []
     batch_actions = []
+    batch_probs = []
     batch_rewards = []
+    batch_valid_moves = []
     for exp in experiences:
         batch_states.append(exp['state'])
         batch_actions.append(exp['action'])
         batch_rewards.append(exp['reward'])
-    return torch.stack(batch_states), torch.LongTensor(batch_actions), torch.Tensor(batch_rewards)
+        batch_probs.append(exp['prob'])
+        batch_valid_moves.append(exp['valid_moves'])
+    return torch.stack(batch_states), torch.LongTensor(batch_actions), torch.Tensor(batch_rewards), torch.Tensor(
+        batch_probs), torch.Tensor(batch_valid_moves)
