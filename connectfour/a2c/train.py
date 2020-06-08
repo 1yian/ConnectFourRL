@@ -1,26 +1,6 @@
 import random
-
 import numpy as np
-
 from connectfour.env.vectorized_env import VectorizedEnv
-
-
-def get_valid_moves(state):
-    top_row = state[0]
-    ohe_valid_moves = [0] * len(top_row)
-    for i in range(len(top_row)):
-        if top_row[i] == 0:
-            ohe_valid_moves[i] = 1
-    return ohe_valid_moves
-
-
-def get_valid_move_indices(state):
-    top_row = state[0]
-    move_indices = []
-    for i in range(len(top_row)):
-        if top_row[i] == 0:
-            move_indices.append(i)
-    return move_indices
 
 
 class TrainingSession:
@@ -41,11 +21,9 @@ class TrainingSession:
         while episode_count < max_episodes:
 
             if agent_is_playing:
-                valid_moves = [get_valid_moves(state) for state in states]
-                actions, _, _ = self.agent.select_actions(states, valid_moves, greedy=True)
+                actions, *_ = self.agent.select_actions(states, greedy=True)
             else:
-                valid_moves = [get_valid_move_indices(state) for state in states]
-                actions = np.array([random.choice(moves) for moves in valid_moves])
+                actions = [self._get_rand_move(state) for state in states]
 
             new_states, rewards, dones = env.step(actions)
             for env_index in range(num_envs):
@@ -64,39 +42,66 @@ class TrainingSession:
 
     def self_play_episodes(self, num_envs, episodes_per_env):
         env = VectorizedEnv(game_class=self.game, num_envs=num_envs)
-
-        p1_episode = [[] for _ in range(num_envs)]
-        p2_episode = [[] for _ in range(num_envs)]
-        current_player_episodes, opposing_player_episodes = p1_episode, p2_episode
-
         states = env.reset()
+
+        p1_episodes, p2_episodes = [[] for _ in range(num_envs)], [[] for _ in range(num_envs)]
+        current_episodes, opponent_episodes = p1_episodes, p2_episodes
 
         episode_count = 0
         total_episodes = (episodes_per_env * num_envs)
         while episode_count < total_episodes:
-            valid_moves = [get_valid_moves(state) for state in states]
-            actions, probs, processed_states = self.agent.select_actions(states, valid_moves, greedy=False)
+            actions, data = self.agent.select_actions(states, greedy=False)
+            states, action_probs, valid_moves = data['processed_states'], data['action_probs'], data['valid_moves']
+
             new_states, rewards, dones = env.step(actions)
-            experiences = [
-                {'state': state, 'reward': reward, 'action': action, 'done': done, 'prob': prob, 'valid_moves': moves}
-                for state, action, reward, done, prob, moves in
-                zip(processed_states, actions, rewards, dones, probs, valid_moves)]
+
+            exp_data = zip(states, actions, rewards, dones, action_probs, valid_moves)
+            experiences = self._unpack_experience_data(exp_data)
 
             for env_index in range(num_envs):
-                current_episode, other_episode = current_player_episodes[env_index], opposing_player_episodes[env_index]
-                current_episode.append(experiences[env_index])
+                current_episodes[env_index].append(experiences[env_index])
 
-                reward = experiences[env_index]['reward']
+                if experiences[env_index]['done']:
+                    # Mirror the terminal reward since connect four is symmetrical
+                    reward = experiences[env_index]['reward']
+                    opponent_episodes[env_index][-1]['reward'] = - reward
 
-                if reward != 0:
-                    self.buffer.add(current_episode)
-                    other_episode[-1]['reward'] = - reward
-                    self.buffer.add(other_episode)
+                    self.buffer.add(current_episodes[env_index])
+                    self.buffer.add(opponent_episodes[env_index])
 
-                    current_player_episodes[env_index] = []
-                    opposing_player_episodes[env_index] = []
+                    current_episodes[env_index] = []
+                    opponent_episodes[env_index] = []
 
                     episode_count += 1
 
             states = new_states
-            current_player_episodes, opposing_player_episodes = opposing_player_episodes, current_player_episodes
+            current_episodes, opponent_episodes = opponent_episodes, current_episodes
+
+    @staticmethod
+    def _unpack_experience_data(raw_exp_data):
+        experiences = []
+        for raw_exp in raw_exp_data:
+            state, action, reward, done, action_prob, valid_moves = raw_exp
+            exp_dict = {
+                'state': state,
+                'action': action,
+                'reward': reward,
+                'done': done,
+                'action_prob': action_prob,
+                'valid_moves': valid_moves,
+            }
+            experiences.append(exp_dict)
+        return experiences
+
+    def _get_rand_move(self, state):
+        valid_moves = self._get_valid_move_indices(state)
+        return random.choice(valid_moves)
+
+    @staticmethod
+    def _get_valid_move_indices(state):
+        top_row = state[0]
+        move_indices = []
+        for i in range(len(top_row)):
+            if top_row[i] == 0:
+                move_indices.append(i)
+        return move_indices
