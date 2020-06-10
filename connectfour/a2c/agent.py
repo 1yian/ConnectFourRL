@@ -1,9 +1,10 @@
 import numpy as np
 import torch
 import torch.nn as nn
-import connectfour.a2c.config as config
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+
+import connectfour.a2c.config as config
 
 
 class ActorCriticAgent(nn.Module):
@@ -21,38 +22,41 @@ class ActorCriticAgent(nn.Module):
 
         # Here we define the key parts of the neural network.
         activation = nn.ReLU()
-        conv_filters = 64
+        conv_filters = 256
 
         # Take a convolutional head
-        self.conv1 = nn.Conv2d(2, conv_filters, 2, 1)
+        self.conv1 = nn.Conv2d(2, conv_filters, 1, 1)
 
         self.residual_blocks = nn.Sequential(
+            ResidualBlock(filters=conv_filters, activation=activation),
             ResidualBlock(filters=conv_filters, activation=activation),
             ResidualBlock(filters=conv_filters, activation=activation),
             ResidualBlock(filters=conv_filters, activation=activation),
         )
 
         self.policy_head = nn.Sequential(
-            nn.Conv2d(64, 2, 1, 1),
+            nn.Conv2d(conv_filters, 2, 1, 1),
             nn.BatchNorm2d(2),
             nn.Flatten(start_dim=1),
             activation,
-            nn.Linear(60, config.ACTION_DIM),
+            nn.Linear(84, config.ACTION_DIM),
         )
 
         self.value_head = nn.Sequential(
-            nn.Conv2d(64, 1, 1, 1),
+            nn.Conv2d(conv_filters, 1, 1, 1),
             nn.BatchNorm2d(1),
             nn.Flatten(start_dim=1),
             activation,
-            nn.Linear(30, 1),
+            nn.Linear(42, 256),
+            activation,
+            nn.Linear(256, 1),
             nn.Tanh(),
         )
 
         self.to(self.device)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=config.LEARNING_RATE, weight_decay=config.L2_PENALTY,
                                           eps=config.EPS)
-        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 1, gamma=0.9)
+        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 1, gamma=0.95)
 
     def forward(self, x, valid_moves):
         x = x.to(self.device)
@@ -65,12 +69,11 @@ class ActorCriticAgent(nn.Module):
         value = self.value_head(x)
         return policy, value
 
-    @staticmethod
-    def _mask_invalid_actions(logits, valid_moves):
+    def _mask_invalid_actions(self, logits, valid_moves):
         valid_moves = torch.log(valid_moves)
 
         min_mask = torch.ones(*valid_moves.size(), dtype=torch.float) * torch.finfo(torch.float).min
-        inf_mask = torch.max(valid_moves, min_mask)
+        inf_mask = torch.max(valid_moves, min_mask).to(self.device)
 
         return logits + inf_mask
 
@@ -91,9 +94,14 @@ class ActorCriticAgent(nn.Module):
         processed_states = torch.stack([self._preprocess_state(state) for state in states])
 
         with torch.no_grad():
-            logits = self(processed_states, valid_moves)[0].cpu()
+            logits, value = self(processed_states, valid_moves)
+            logits = logits.cpu()
+
             probs = nn.functional.softmax(logits, 1)
 
+        if not greedy:
+            probs = self._get_noise(probs, valid_moves)
+        print(probs)
         dist = torch.distributions.categorical.Categorical(probs=probs)
 
         actions = dist.sample().numpy() if not greedy else np.argmax(probs, 1)
@@ -113,8 +121,18 @@ class ActorCriticAgent(nn.Module):
         return torch.Tensor(valid_moves_vector)
 
     @staticmethod
-    def _get_noise(prob_arrays):
-        return [np.random.dirichlet([config.DIRECHLET_ALPHA] * len(probs)) for probs in prob_arrays]
+    def _get_noise(probs, valid_moves):
+        for moves, prob in zip(valid_moves, probs):
+            num_moves = int(torch.sum(moves))
+            noise = np.random.dirichlet([config.DIRECHLET_ALPHA] * num_moves)
+            count = 0
+
+            for i in range(len(prob)):
+                if moves[i] == 1:
+                    prob[i] += noise[count]
+                    count += 1
+            prob /= torch.sum(prob)
+        return probs
 
     @staticmethod
     def _preprocess_state(state: np.ndarray) -> torch.Tensor:

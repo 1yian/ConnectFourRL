@@ -1,5 +1,5 @@
 import random
-import numpy as np
+
 from connectfour.env.vectorized_env import VectorizedEnv
 
 
@@ -13,7 +13,7 @@ class TrainingSession:
         max_episodes = episodes_per_env * num_envs
         env = VectorizedEnv(game_class=self.game, num_envs=num_envs)
 
-        score = {'Agent': 0, 'Random': 0}
+        score = {'Agent': 0, 'Random': 0, 'Draw': 0}
         agent_is_playing = True
 
         states = env.reset()
@@ -32,13 +32,34 @@ class TrainingSession:
                         winner = 'Agent' if agent_is_playing else 'Random'
                         score[winner] += 1
                     else:
-                        score['Agent'] += 0.5
-                        score['Random'] += 0.5
+                        score['Draw'] += 1
                     episode_count += 1
 
             agent_is_playing = not agent_is_playing
             states = new_states
+
+        score['Agent'] /= episode_count
+        score['Random'] /= episode_count
+        score['Draw'] /= episode_count
         return score
+
+    def eval_vs_person(self, agent, agent_goes_first=True, greedy=False):
+        env = self.game()
+        state = env.reset()
+        agent_is_playing = agent_goes_first
+        while True:
+            if agent_is_playing:
+                action = agent.select_actions([state], greedy=greedy)[0]
+                if not greedy:
+                    action = action[0]
+
+            else:
+                print(env.render())
+                action = int(input("Which column do you want to move? (0-6): "))
+            state, reward, done = env.step(action)
+            agent_is_playing = not agent_is_playing
+            if done:
+                break
 
     def self_play_episodes(self, num_envs, episodes_per_env):
         env = VectorizedEnv(game_class=self.game, num_envs=num_envs)

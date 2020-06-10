@@ -67,9 +67,9 @@ class ConnectFour:
 
     def check_move(self, move):
         try:
-            cond1 = not 0 <= move < config.COLUMNS
-            cond2 = self.grid[0][move] != config.BLANK_SYMBOL
-            return cond1 or cond2 or self.done
+            cond1 = 0 <= move < config.COLUMNS
+            cond2 = self.grid[0][move] == config.INT_BLANK
+            return cond1 and cond2
         except:
             return False
 
