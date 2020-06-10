@@ -7,4 +7,4 @@ if __name__ == '__main__':
     agent = ActorCriticAgent(output=True, writer=False)
     agent.load_checkpoint('checkpoints/a2c_120.pt')
     training_sess = TrainingSession(ConnectFour, agent, None)
-    training_sess.eval_vs_person(agent, False, greedy=True)
+    training_sess.eval_vs_person(agent, True, greedy=True)
