@@ -7,4 +7,6 @@ if __name__ == '__main__':
     agent = ActorCriticAgent(output=True, writer=False)
     agent.load_checkpoint('checkpoints/a2c_135.pt')
     training_sess = TrainingSession(ConnectFour, agent, None)
-    training_sess.eval_vs_person(agent, True, greedy=True)
+    agent_plays_first = input("Agent plays first? y/n: ")
+    agent_plays_first = agent_plays_first == 'y'
+    training_sess.eval_vs_person(agent, agent_plays_first, greedy=True)

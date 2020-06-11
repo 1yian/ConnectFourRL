@@ -56,7 +56,7 @@ class ActorCriticAgent(nn.Module):
         self.to(self.device)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=config.LEARNING_RATE, weight_decay=config.L2_PENALTY,
                                           eps=config.EPS)
-        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 1, gamma=0.95)
+        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 1, gamma=config.LEARNING_RATE_DECAY)
 
     def forward(self, x, valid_moves):
         x = x.to(self.device)
@@ -74,7 +74,7 @@ class ActorCriticAgent(nn.Module):
 
         min_mask = torch.ones(*valid_moves.size(), dtype=torch.float) * torch.finfo(torch.float).min
         inf_mask = torch.max(valid_moves, min_mask).to(self.device)
-
+        # Mask the logits of invalid actions with a number very close to the minimum float number.
         return logits + inf_mask
 
     def select_actions(self, states, greedy):
@@ -83,33 +83,39 @@ class ActorCriticAgent(nn.Module):
         Takes in a vector of states and outputs the agents selected action.
 
         :param states: a vector of numpy arrays representing the raw state of connect four.
-        :param greedy: whether or not to pick our action greedily or stochastically.
+        :param greedy: whether or not to pick our action using a greedy or stochastic policy.
 
-        :return: actions: a corresponding vector of actions. each action is a column where the agent wants to play.
-                action_probs: a vector of probabilities. gives the probability of π(a | s) for off-policy learning.
-                processed_states = a vector of processed_states
+        :return: actions: a resultant vector of actions from the agent.
+                 training_data: a dict of information containing:
+                     action_probs: the policy probabilities of the selected actions for the given states: π(actions | states).
+                     processed_states: a vector of the processed_states for input into the neural network
+                     valid_moves: a vector of the one hot encoded valid moves
         """
 
         valid_moves = self._get_valid_moves(states)
         processed_states = torch.stack([self._preprocess_state(state) for state in states])
 
-        with torch.no_grad():
-            logits, value = self(processed_states, valid_moves)
-            logits = logits.cpu()
+        noisy = (config.DIRECHLET_ALPHA > 0) and not greedy
+        probs = self.get_policy_dist(processed_states, valid_moves, noisy=noisy)
 
-            probs = nn.functional.softmax(logits, 1)
-
-        if not greedy:
-            probs = self._get_noise(probs, valid_moves)
-        print(probs)
         dist = torch.distributions.categorical.Categorical(probs=probs)
-
         actions = dist.sample().numpy() if not greedy else np.argmax(probs, 1)
         action_prob = probs[range(len(actions)), actions]
 
         training_data = {'processed_states': processed_states, 'valid_moves': valid_moves, 'action_probs': action_prob}
 
         return actions, training_data
+
+    def get_policy_dist(self, processed_states, valid_moves, noisy):
+        with torch.no_grad():
+            logits, value = self(processed_states, valid_moves)
+            logits = logits.cpu()
+            probs = nn.functional.softmax(logits, 1)
+
+        if noisy:
+            probs = self._get_noise(probs, valid_moves)
+        return probs
+
 
     @staticmethod
     def _get_valid_moves(states):
@@ -121,10 +127,11 @@ class ActorCriticAgent(nn.Module):
         return torch.Tensor(valid_moves_vector)
 
     @staticmethod
-    def _get_noise(probs, valid_moves):
+    def _get_noise(probs: torch.Tensor, valid_moves: torch.Tensor) -> torch.Tensor:
+        valid_moves = valid_moves.numpy()
         for moves, prob in zip(valid_moves, probs):
-            num_moves = int(torch.sum(moves))
-            noise = np.random.dirichlet([config.DIRECHLET_ALPHA] * num_moves)
+            num_moves = int(np.sum(moves))
+            noise = torch.Tensor(np.random.dirichlet([config.DIRECHLET_ALPHA] * num_moves))
             count = 0
 
             for i in range(len(prob)):
@@ -136,14 +143,14 @@ class ActorCriticAgent(nn.Module):
 
     @staticmethod
     def _preprocess_state(state: np.ndarray) -> torch.Tensor:
-        new_state = torch.zeros(2, *config.AGENT_INPUT)
+        new_state = np.zeros((2, *config.AGENT_INPUT))
         for i in range(len(state)):
             for j in range(len(state[i])):
                 element = state[i][j]
                 if element != 0:
                     channel = 0 if element == 1 else 1
                     new_state[channel][i + config.ROW_OFFSET][j + config.COL_OFFSET] = 1
-        return new_state
+        return torch.Tensor(new_state)
 
     def train_on_loader(self, loader: DataLoader):
         for batch in loader:
@@ -191,34 +198,11 @@ class ActorCriticAgent(nn.Module):
         }, path)
 
     def load_checkpoint(self, path):
-        checkpoint = torch.load(path)
+        checkpoint = torch.load(path, map_location=self.device)
         self.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.iter = checkpoint['iter']
 
-
-class GenericNetwork(nn.Module):
-    def __init__(self, output_dim):
-        super(GenericNetwork, self).__init__()
-        self.activation = nn.LeakyReLU()
-        self.conv1 = nn.Conv2d(2, 256, 4, 1)
-        self.bn1 = nn.BatchNorm2d(256)
-        self.conv2 = nn.Conv2d(256, 64, 2, 1)
-        self.bn2 = nn.BatchNorm2d(64)
-        self.flatten = nn.Flatten(start_dim=1)
-        self.fc1 = nn.Linear(384, output_dim)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.activation(x)
-        x = self.conv2(x)
-        x = self.bn2(x)
-        x = self.activation(x)
-        x = self.flatten(x)
-        x = self.fc1(x)
-
-        return x
 
 
 class ResidualBlock(nn.Module):

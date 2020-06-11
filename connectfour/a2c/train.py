@@ -1,6 +1,6 @@
 import random
-
 from connectfour.env.vectorized_env import VectorizedEnv
+import copy
 
 
 class TrainingSession:
@@ -44,6 +44,7 @@ class TrainingSession:
         return score
 
     def eval_vs_person(self, agent, agent_goes_first=True, greedy=False):
+        past_envs = []
         env = self.game()
         state = env.reset()
         agent_is_playing = agent_goes_first
@@ -55,8 +56,19 @@ class TrainingSession:
 
             else:
                 print(env.render())
-                action = int(input("Which column do you want to move? (0-6): "))
-            state, reward, done = env.step(action)
+                try:
+                    action = int(input("Which column do you want to move? (0-6): "))
+                except:
+                    env = past_envs.pop()
+                    continue
+                prev_env = past_envs.append(copy.deepcopy(env))
+
+            try:
+                state, reward, done = env.step(action)
+            except:
+                env = past_envs.pop()
+                continue
+
             agent_is_playing = not agent_is_playing
             if done:
                 break

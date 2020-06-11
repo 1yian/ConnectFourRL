@@ -12,7 +12,7 @@ if __name__ == '__main__':
     agent = ActorCriticAgent(output=True, writer=True)
     buffer = ExperienceReplayBuffer()
     training_sess = TrainingSession(ConnectFour, agent, buffer)
-    agent.load_checkpoint('checkpoints/a2c_75.pt')
+    agent.load_checkpoint('checkpoints/a2c_135.pt')
 
     for i in range(76, 2560):
         training_sess.self_play_episodes(64, 512)
