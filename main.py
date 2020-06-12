@@ -12,10 +12,10 @@ if __name__ == '__main__':
     agent = ActorCriticAgent(output=True, writer=True)
     buffer = ExperienceReplayBuffer()
     training_sess = TrainingSession(ConnectFour, agent, buffer)
-    agent.load_checkpoint('checkpoints/a2c_135.pt')
+    agent.load_checkpoint('checkpoints/a2c_240.pt')
 
-    for i in range(76, 2560):
-        training_sess.self_play_episodes(64, 512)
+    for i in range(241, 2560):
+        training_sess.self_play_episodes(42, 1024)
         loader = DataLoader(buffer, batch_size=4096, shuffle=True, num_workers=8, collate_fn=collate_experiences,
                             pin_memory=True)
         agent.train_on_loader(loader)

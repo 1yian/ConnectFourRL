@@ -143,14 +143,11 @@ class ActorCriticAgent(nn.Module):
 
     @staticmethod
     def _preprocess_state(state: np.ndarray) -> torch.Tensor:
-        new_state = np.zeros((2, *config.AGENT_INPUT))
-        for i in range(len(state)):
-            for j in range(len(state[i])):
-                element = state[i][j]
-                if element != 0:
-                    channel = 0 if element == 1 else 1
-                    new_state[channel][i + config.ROW_OFFSET][j + config.COL_OFFSET] = 1
-        return torch.Tensor(new_state)
+        top_channel = (state == 1)
+        bottom_channel = (state == -1)
+        result = np.stack([top_channel, bottom_channel]).astype(int)
+        result = torch.from_numpy(result).float()
+        return result
 
     def train_on_loader(self, loader: DataLoader):
         for batch in loader:
@@ -166,8 +163,8 @@ class ActorCriticAgent(nn.Module):
 
             log_probs = policy_log_probs[range(len(actions)), actions]
 
-            masked_probs = torch.exp(log_probs).clone().detach()
-            importance_sample_ratio = masked_probs / probs.to(self.device)
+            current_probs = torch.exp(log_probs).clone().detach()
+            importance_sample_ratio = current_probs / probs.to(self.device)
 
             policy_loss = (importance_sample_ratio.detach() * (-advantage * log_probs)).mean()
 

@@ -6,16 +6,10 @@ import connectfour.env.config as config
 class ConnectFour:
     DIRECTIONS = {
         'up': (-1, 0),
-        'down': (1, 0),
         'right': (0, 1),
-        'left': (0, -1),
-        'up-left': (-1, -1),
         'up-right': (-1, 1),
-        'down-left': (1, -1),
         'down-right': (1, 1)
     }
-
-    PAIRS = [('up', 'down'), ('right', 'left'), ('up-left', 'down-right'), ('up-right', 'down-left')]
     INT_TO_RENDERED = {
         config.INT_P1: config.P1_SYMBOL,
         config.INT_P2: config.P2_SYMBOL,
@@ -97,16 +91,12 @@ class ConnectFour:
                 return 0
             return 1 + check_dir(r + direction[0], c + direction[1], direction)
 
-        vals = []
-        for pair in ConnectFour.PAIRS:
-            dir = check_dir(row, col, ConnectFour.DIRECTIONS[pair[0]])
-            opp_dir = check_dir(row, col, ConnectFour.DIRECTIONS[pair[1]])
-            vals.append(dir + opp_dir - 1)
-        longest_row = max(vals)
-
-        if longest_row >= config.NUM_IN_ROW:
-            self.score = longest_row
-            return True
+        for direction in ConnectFour.DIRECTIONS.values():
+            dir = check_dir(row, col, direction)
+            opp_dir = check_dir(row, col, (-direction[0], -direction[1]))
+            if dir + opp_dir - 1 >= config.NUM_IN_ROW:
+                self.score = config.NUM_IN_ROW
+                return True
 
         for row in grid:
             if config.INT_BLANK in row:
