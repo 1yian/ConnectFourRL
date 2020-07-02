@@ -40,8 +40,6 @@ class ConnectFour:
         done = self.done
         if not self.done:
             self.to_move = config.INT_P2 if p1_is_playing else config.INT_P1
-        else:
-            self.reset()
         return self.get_state(), reward, done
 
     def get_state(self):
@@ -67,10 +65,9 @@ class ConnectFour:
         except:
             return False
 
-    def get_options(self):
-        map = [1, 0, 0]
-        options = [map[x] for x in self.grid[0]]
-        return options
+    def legal_actions(self):
+        options = [1 if x == 0 else 0 for x in self.grid[0]]
+        return np.nonzero(options)
 
     def reset(self):
         self.grid = [[config.INT_BLANK for j in range(config.COLUMNS)] for i in range(config.ROWS)]

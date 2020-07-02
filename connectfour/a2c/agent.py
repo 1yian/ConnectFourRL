@@ -4,17 +4,18 @@ import torch.nn as nn
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
+import connectfour.common.agent
 import connectfour.a2c.config as config
 
 
-class ActorCriticAgent(nn.Module):
+class ActorCriticAgent(nn.Module, connectfour.common.agent.Agent):
 
     def __init__(self, writer=False, output=True):
         super(ActorCriticAgent, self).__init__()
 
         # Parameters for how we want to show training progress
         self.output = output
-        self.writer = SummaryWriter() if writer else None
+        self.writer = writer
         self.iter = 0
 
         # Pick GPU if supported, else CPU
@@ -22,16 +23,13 @@ class ActorCriticAgent(nn.Module):
 
         # Here we define the key parts of the neural network.
         activation = nn.ReLU()
-        conv_filters = 256
+        conv_filters = 64
 
-        # Take a convolutional head
         self.conv1 = nn.Conv2d(2, conv_filters, 1, 1)
 
         self.residual_blocks = nn.Sequential(
             ResidualBlock(filters=conv_filters, activation=activation),
-            ResidualBlock(filters=conv_filters, activation=activation),
-            ResidualBlock(filters=conv_filters, activation=activation),
-            ResidualBlock(filters=conv_filters, activation=activation),
+            ResidualBlock(filters=conv_filters, activation=activation)
         )
 
         self.policy_head = nn.Sequential(
@@ -218,13 +216,13 @@ class ResidualBlock(nn.Module):
         self.conv2_bn = nn.BatchNorm2d(self.filters)
 
     def forward(self, x):
-        input = x
+        init_x = x
         x = self.conv1(x)
         x = self.conv1_bn(x)
         x = self.activation(x)
 
         x = self.conv2(x)
         x = self.conv2_bn(x)
-        x = x + input
+        x = x + init_x
         x = self.activation(x)
         return x
