@@ -8,7 +8,6 @@ class VectorizedEnv:
         self.envs = [game_class() for _ in range(num_envs)]
         self.num_workers = min(mp.cpu_count(), num_envs)
 
-
     def step(self, actions):
         states, rewards, dones = [], [], []
         for action, env in zip(actions, self.envs):

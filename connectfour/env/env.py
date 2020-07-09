@@ -22,6 +22,11 @@ class ConnectFour:
         self.done = False
         self.score = 0
 
+    def __eq__(self, other):
+        if type(self) != type(other):
+            return False
+        return (other.grid == self.grid) and (other.to_move == self.to_move)
+
     def step(self, move):
         move_is_valid = self.check_move(move)
         if not move_is_valid:
@@ -67,7 +72,7 @@ class ConnectFour:
 
     def legal_actions(self):
         options = [1 if x == 0 else 0 for x in self.grid[0]]
-        return np.nonzero(options)
+        return np.nonzero(options)[0]
 
     def reset(self):
         self.grid = [[config.INT_BLANK for j in range(config.COLUMNS)] for i in range(config.ROWS)]

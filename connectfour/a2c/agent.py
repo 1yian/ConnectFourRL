@@ -23,11 +23,13 @@ class ActorCriticAgent(nn.Module, connectfour.common.agent.Agent):
 
         # Here we define the key parts of the neural network.
         activation = nn.ReLU()
-        conv_filters = 64
+        conv_filters = 256
 
         self.conv1 = nn.Conv2d(2, conv_filters, 1, 1)
 
         self.residual_blocks = nn.Sequential(
+            ResidualBlock(filters=conv_filters, activation=activation),
+            ResidualBlock(filters=conv_filters, activation=activation),
             ResidualBlock(filters=conv_filters, activation=activation),
             ResidualBlock(filters=conv_filters, activation=activation)
         )
@@ -94,7 +96,7 @@ class ActorCriticAgent(nn.Module, connectfour.common.agent.Agent):
         processed_states = torch.stack([self._preprocess_state(state) for state in states])
 
         noisy = (config.DIRECHLET_ALPHA > 0) and not greedy
-        probs = self.get_policy_dist(processed_states, valid_moves, noisy=noisy)
+        probs, _ = self.get_policy_dist(processed_states, valid_moves, noisy=noisy)
 
         dist = torch.distributions.categorical.Categorical(probs=probs)
         actions = dist.sample().numpy() if not greedy else np.argmax(probs, 1)
@@ -104,6 +106,14 @@ class ActorCriticAgent(nn.Module, connectfour.common.agent.Agent):
 
         return actions, training_data
 
+    def get_prediction(self, states):
+
+        valid_moves = self._get_valid_moves(states)
+        processed_states = torch.stack([self._preprocess_state(state) for state in states])
+        probs, val = self.get_policy_dist(processed_states, valid_moves, noisy=False)
+
+        return probs, val
+
     def get_policy_dist(self, processed_states, valid_moves, noisy):
         with torch.no_grad():
             logits, value = self(processed_states, valid_moves)
@@ -112,7 +122,7 @@ class ActorCriticAgent(nn.Module, connectfour.common.agent.Agent):
 
         if noisy:
             probs = self._get_noise(probs, valid_moves)
-        return probs
+        return probs, value
 
 
     @staticmethod

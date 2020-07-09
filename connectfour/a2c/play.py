@@ -3,6 +3,7 @@ from connectfour.a2c.train import TrainingSession
 
 from connectfour.env.env import ConnectFour
 
+
 if __name__ == '__main__':
     agent = ActorCriticAgent(output=True, writer=False)
     agent.load_checkpoint('checkpoints/a2c_180.pt')
