@@ -1,7 +1,10 @@
 import random
+
 import torch
 import torch.nn as nn
-from env.env import ConnectFour
+from hyperopt import hp
+
+from env.game import ConnectFourState
 
 
 class TorchAgent(nn.Module()):
@@ -9,14 +12,14 @@ class TorchAgent(nn.Module()):
     def __init__(self):
         super().__init__()
 
-    def select_move(self, game: ConnectFour, eval=True):
+    def select_move(self, game: ConnectFourState, eval=True):
         """
 
         :param state: A copy of a ConnectFour instance, representing the current game state.
         :param eval: Whether to pick moves greedily for evaluation, or based on some sort of exploration scheme.
         :return: The agent's desired move as an integer.
         """
-        return random.randint(0, ConnectFour.NUM_COLS - 1)
+        return random.randint(0, ConnectFourState.NUM_COLS - 1)
 
     @staticmethod
     def get_default_params():
@@ -26,6 +29,16 @@ class TorchAgent(nn.Module()):
         """
         return {
             'seed': 42
+        }
+
+    @staticmethod
+    def get_hyperparam_space():
+        """
+        Get the hyperparam tuning space of the agent.
+        :return: A dict with hp spaces for the tunable parameters defined in get_default_params
+        """
+        return {
+            'seed': hp.uniform(-100, 100)
         }
 
     @property
